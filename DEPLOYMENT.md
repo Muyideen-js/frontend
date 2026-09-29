@@ -37,6 +37,23 @@ The following environment variables must be configured in Vercel:
 
 ## Deployment Steps
 
+## Pre-deployment checklist
+
+Complete this checklist for every production release:
+
+- [ ] The release branch is green in CI and the production commit is identified.
+- [ ] `npm ci` and `npm run build` succeed with the Node.js version used by Vercel.
+- [ ] `NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_STELLAR_NETWORK`, and
+      `NEXT_PUBLIC_STELLAR_HORIZON_URL` point at production services.
+- [ ] The backend release and any database migrations are compatible with this
+      frontend version.
+- [ ] Sentry and Vercel alerting are enabled, and the on-call contact is known.
+- [ ] A rollback deployment has been identified and its API compatibility checked.
+- [ ] No `.env*` file, token, private key, or secret is included in the commit.
+
+Do not use preview environment variables for production. Record the Vercel
+deployment ID, commit SHA, and release owner in the release or incident log.
+
 ### 1. Connect to Vercel
 
 ```bash
@@ -75,6 +92,17 @@ git push origin main
 3. Test creator profile page: `/creators/[username]`
 4. Test creator dashboard: `/creators/[username]/dashboard` (requires login)
 5. Verify API connectivity in browser console
+
+Run a smoke test from a clean browser session before announcing the release:
+
+```bash
+curl --fail --silent --show-error "$NEXT_PUBLIC_API_URL/health"
+npm run build
+```
+
+Then exercise sign-in, wallet connection, a read-only creator profile, and the
+transaction flow. Confirm that requests use the expected API host and Stellar
+network; a successful page load alone does not prove the configuration is right.
 
 ## Monitoring
 
@@ -134,6 +162,25 @@ vercel list
 # Rollback to specific deployment
 vercel rollback [deployment-id]
 ```
+
+If the release is already serving traffic, pause announcements and:
+
+1. Roll back to the last known-good Vercel deployment.
+2. Confirm that its frontend variables still match the backend version it calls.
+3. Repeat the smoke tests above, then watch Vercel and Sentry for one normal
+   traffic interval.
+4. Record both deployment IDs, commit SHAs, user impact, and the follow-up owner.
+
+### Emergency procedures
+
+- **API outage:** verify the backend health endpoint and Vercel logs. Avoid
+  repeated client retries that could amplify load.
+- **Bad frontend release:** use `vercel list` to identify the last known-good
+  deployment and run `vercel rollback <deployment-id>`.
+- **Leaked credential:** revoke it immediately, replace it in Vercel and CI,
+  redeploy, and document the rotation. Never place it in logs or issues.
+- **Error spike or wallet failures:** capture the deployment ID, affected route,
+  browser error, network, and time window in Sentry before changing code.
 
 ## Local Development
 
